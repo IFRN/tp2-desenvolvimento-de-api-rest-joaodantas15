@@ -27,8 +27,6 @@ class EleicaoViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='votar')
     def votar(self, request, pk=None):
         eleicao = self.get_object()
-        
-        # 1. Validar a entrada com o VotacaoInputSerializer
         serializer = VotacaoInputSerializer(data={**request.data, 'eleicao_id': eleicao.id})
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -39,16 +37,10 @@ class EleicaoViewSet(viewsets.ModelViewSet):
         em_branco = data.get('em_branco', False)
 
         try:
-            # 2. Transação Atómica para garantir o sigilo e integridade
             with transaction.atomic():
-                # Registro de Presença (O "Caderno")
                 RegistroVotacao.objects.create(eleitor_id=eleitor_id, eleicao=eleicao)
-
-                # Gerar Token aleatório e seu Hash
                 token = secrets.token_urlsafe(32)
                 token_hash = hashlib.sha256(token.encode()).hexdigest()
-
-                # Criar o Voto (ANÔNIMO)
                 candidato = Candidato.objects.get(pk=candidato_id) if candidato_id else None
                 voto = Voto.objects.create(
                     eleicao=eleicao,
@@ -56,10 +48,7 @@ class EleicaoViewSet(viewsets.ModelViewSet):
                     em_branco=em_branco,
                     comprovante_hash=token_hash
                 )
-
-                # URL do QR Code
                 qr_url = request.build_absolute_uri(f'/eleicoes_api/comprovantes/qr/?token={token}')
-
                 return Response({
                     "mensagem": "Voto registrado com sucesso. Guarde o seu comprovante.",
                     "comprovante": {
@@ -70,21 +59,103 @@ class EleicaoViewSet(viewsets.ModelViewSet):
                         "qr_code_url": qr_url
                     }
                 }, status=status.HTTP_201_CREATED)
-
         except IntegrityError:
             return Response({"detail": "Eleitor já votou nesta eleição."}, status=status.HTTP_409_CONFLICT)
 
-# --- Funções Auxiliares (Públicas) ---
+    @action(detail=True, methods=['post'])
+    def abrir(self, request, pk=None):
+        eleicao = self.get_object()
+        if eleicao.status != 'rascunho':
+            return Response({'error': 'Apenas rascunhos podem ser abertos.'}, status=400)
+        if eleicao.candidatos.count() < 2:
+            return Response({'error': 'Mínimo de 2 candidatos exigido.'}, status=400)
+        if eleicao.aptos.count() < 1:
+            return Response({'error': 'Mínimo de 1 eleitor apto exigido.'}, status=400)
+        eleicao.status = 'aberta'
+        eleicao.save()
+        return Response(EleicaoSerializer(eleicao).data)
+
+    @action(detail=True, methods=['post'])
+    def encerrar(self, request, pk=None):
+        eleicao = self.get_object()
+        if eleicao.status != 'aberta':
+            return Response({'error': 'Só pode encerrar eleições abertas.'}, status=400)
+        eleicao.status = 'encerrada'
+        eleicao.save()
+        return Response(EleicaoSerializer(eleicao).data)
+
+    @action(detail=True, methods=['get'])
+    def apuracao(self, request, pk=None):
+        eleicao = self.get_object()
+        if eleicao.status not in ['encerrada', 'apurada']:
+            return Response({'error': 'Apuração disponível apenas após o encerramento.'}, status=403)
+        total_aptos = eleicao.aptos.count()
+        total_votantes = eleicao.registros_votacao.count()
+        votos_brancos = eleicao.votos.filter(em_branco=True).count()
+        votos_validos_total = eleicao.votos.filter(em_branco=False).count()
+        resultado = []
+        max_votos = -1
+        vencedores = []
+        for c in eleicao.candidatos.all():
+            votos_c = c.votos.count()
+            percentual = (votos_c / votos_validos_total * 100) if votos_validos_total > 0 else 0
+            resultado.append({
+                "candidato": c.nome_urna,
+                "numero": c.numero,
+                "votos": votos_c,
+                "percentual": round(percentual, 2)
+            })
+            if votos_c > max_votos:
+                max_votos = votos_c
+                vencedores = [c.nome_urna]
+            elif votos_c == max_votos and max_votos > 0:
+                vencedores.append(c.nome_urna)
+        resultado.sort(key=lambda x: x['votos'], reverse=True)
+        for i, item in enumerate(resultado): item['posicao'] = i + 1
+        if eleicao.status == 'encerrada':
+            eleicao.status = 'apurada'
+            eleicao.save()
+        return Response({
+            "eleicao": eleicao.titulo,
+            "total_aptos": total_aptos,
+            "total_votantes": total_votantes,
+            "total_abstencoes": total_aptos - total_votantes,
+            "votos_validos": votos_validos_total,
+            "votos_brancos": votos_brancos,
+            "resultado": resultado,
+            "vencedores": vencedores,
+            "houve_empate": len(vencedores) > 1
+        })
+
+    @action(detail=True, methods=['get'])
+    def votantes(self, request, pk=None):
+        eleicao = self.get_object()
+        compareceu = request.query_params.get('compareceu', 'true').lower() == 'true'
+        if compareceu:
+            regs = eleicao.registros_votacao.all()
+            data = [{"nome": r.eleitor.nome, "cpf": f"***.{r.eleitor.cpf[4:11]}-**", "data_hora": r.data_hora} for r in regs]
+        else:
+            aptos_ids = eleicao.aptos.values_list('eleitor_id', flat=True)
+            votou_ids = eleicao.registros_votacao.values_list('eleitor_id', flat=True)
+            abstencoes = Eleitor.objects.filter(id__in=aptos_ids).exclude(id__in=votou_ids)
+            data = [{"nome": e.nome, "cpf": f"***.{e.cpf[4:11]}-**"} for e in abstencoes]
+        return Response(data)
+
+    @action(detail=True, methods=['post'], url_path='cadastrar-aptos')
+    def cadastrar_aptos(self, request, pk=None):
+        eleicao = self.get_object()
+        if eleicao.status != 'rascunho': return Response({'error': 'Apenas em rascunho.'}, status=400)
+        ids = request.data.get('eleitores_ids', [])
+        for eid in ids: AptidaoEleitor.objects.get_or_create(eleicao=eleicao, eleitor_id=eid)
+        return Response({"total_cadastrados": len(ids)})
 
 @api_view(['GET'])
 def verificar_comprovante(request):
     token = request.query_params.get('token')
     if not token:
         return Response({"valido": False, "mensagem": "Token ausente"}, status=400)
-    
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     voto = Voto.objects.filter(comprovante_hash=token_hash).first()
-    
     if voto:
         return Response({
             "eleicao": voto.eleicao.titulo,
@@ -102,8 +173,6 @@ def gerar_qr_code(request):
     buffer = BytesIO()
     img.save(buffer, format="PNG")
     return HttpResponse(buffer.getvalue(), content_type="image/png")
-
-# --- Outras ViewSets ---
 
 class EleitorViewSet(viewsets.ModelViewSet):
     queryset = Eleitor.objects.all()

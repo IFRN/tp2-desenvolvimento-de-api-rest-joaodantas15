@@ -9,6 +9,7 @@ class EleitorSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def validate_cpf(self, value):
+        # Validação de formato 000.000.000-00 via Regex
         if not re.match(r'^\d{3}\.\d{3}\.\d{3}-\d{2}$', value):
             raise serializers.ValidationError("O CPF deve estar no formato 000.000.000-00")
         return value
@@ -54,8 +55,9 @@ class RegistroVotacaoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RegistroVotacao
-        fields = '__all__'
-        read_only_fields = fields
+        fields = ['id', 'eleitor', 'eleitor_nome', 'eleicao', 'eleicao_titulo', 'data_hora']
+        # Correção aqui: transformando em uma lista explícita
+        read_only_fields = ['id', 'eleitor', 'eleitor_nome', 'eleicao', 'eleicao_titulo', 'data_hora']
 
 class VotoSerializer(serializers.ModelSerializer):
     candidato_nome_urna = serializers.ReadOnlyField(source='candidato.nome_urna', allow_null=True)
@@ -64,11 +66,13 @@ class VotoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Voto
         fields = ['id', 'eleicao', 'candidato', 'candidato_nome_urna', 'em_branco', 'em_branco_display', 'data_hora']
-        read_only_fields = fields
+        # Correção aqui: transformando em uma lista explícita
+        read_only_fields = ['id', 'eleicao', 'candidato', 'candidato_nome_urna', 'em_branco', 'em_branco_display', 'data_hora']
 
     def get_em_branco_display(self, obj):
         return "BRANCO" if obj.em_branco else None
 
+# Serializer especial para o Endpoint de Votação (Lógica de Negócio)
 class VotacaoInputSerializer(serializers.Serializer):
     eleitor_id = serializers.IntegerField()
     eleicao_id = serializers.IntegerField()

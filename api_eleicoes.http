@@ -1,0 +1,75 @@
+### Variáveis
+@baseUrl = http://localhost:8000/eleicoes_api
+@tokenComprovante = {{votar.response.body.comprovante.token}}
+
+### 1. Criar Eleitor
+POST {{baseUrl}}/eleitores/
+Content-Type: application/json
+
+{
+    "nome": "João Teste",
+    "email": "joao@teste.com",
+    "cpf": "111.222.333-44",
+    "data_nascimento": "1990-01-01",
+    "ativo": true
+}
+
+### 2. Listar Eleições
+GET {{baseUrl}}/eleicoes/
+
+### 3. Cadastrar Aptidão em Lote (Questão 5.5)
+POST {{baseUrl}}/eleicoes/1/cadastrar-aptos/
+Content-Type: application/json
+
+{
+    "eleitores_ids": [1, 2, 3, 4, 5]
+}
+
+### 4. Abrir Eleição (Questão 5.1)
+POST {{baseUrl}}/eleicoes/1/abrir/
+
+### 5. Registrar Voto Válido (Questão 4.1)
+# @name votar
+POST {{baseUrl}}/eleicoes/1/votar/
+Content-Type: application/json
+
+{
+    "eleitor_id": 1,
+    "candidato_id": 1
+}
+
+### 6. Registrar Voto em Branco
+POST {{baseUrl}}/eleicoes/1/votar/
+Content-Type: application/json
+
+{
+    "eleitor_id": 2,
+    "em_branco": true
+}
+
+### 7. Tentar Votar Duas Vezes (Erro 409 esperado)
+POST {{baseUrl}}/eleicoes/1/votar/
+Content-Type: application/json
+
+{
+    "eleitor_id": 1,
+    "candidato_id": 2
+}
+
+### 8. Verificar Comprovante (Questão 4.2)
+GET {{baseUrl}}/verificar-comprovante/?token={{tokenComprovante}}
+
+### 9. Gerar QR Code (Questão 4.3)
+GET {{baseUrl}}/comprovantes/qr/?token={{tokenComprovante}}
+
+### 10. Encerrar Eleição (Questão 5.2)
+POST {{baseUrl}}/eleicoes/1/encerrar/
+
+### 11. Apuração de Resultados (Questão 5.3)
+GET {{baseUrl}}/eleicoes/1/apuracao/
+
+### 12. Listar Votantes / Auditoria (Questão 5.4)
+GET {{baseUrl}}/eleicoes/1/votantes/?compareceu=true
+
+### 13. Listar Abstenções
+GET {{baseUrl}}/eleicoes/1/votantes/?compareceu=false

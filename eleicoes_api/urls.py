@@ -5,7 +5,7 @@ from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from urna import views
 
-# Configuração do Router (Questão 3.23)
+# Configuração do Router 
 router = routers.DefaultRouter()
 router.register(r'eleitores', views.EleitorViewSet)
 router.register(r'eleicoes', views.EleicaoViewSet)
@@ -14,7 +14,7 @@ router.register(r'aptidoes', views.AptidaoEleitorViewSet)
 router.register(r'registros-votacao', views.RegistroVotacaoViewSet)
 router.register(r'votos', views.VotoViewSet)
 
-# Configuração do Swagger (Questão 3.24)
+# Configuração do Swagger 
 schema_view = get_schema_view(
    openapi.Info(
       title="API Gerenciamento de Eleições",

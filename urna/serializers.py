@@ -56,7 +56,7 @@ class RegistroVotacaoSerializer(serializers.ModelSerializer):
     class Meta:
         model = RegistroVotacao
         fields = ['id', 'eleitor', 'eleitor_nome', 'eleicao', 'eleicao_titulo', 'data_hora']
-        # Correção aqui: transformando em uma lista explícita
+        # Correção transformando em lista explicita 
         read_only_fields = ['id', 'eleitor', 'eleitor_nome', 'eleicao', 'eleicao_titulo', 'data_hora']
 
 class VotoSerializer(serializers.ModelSerializer):
@@ -66,7 +66,7 @@ class VotoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Voto
         fields = ['id', 'eleicao', 'candidato', 'candidato_nome_urna', 'em_branco', 'em_branco_display', 'data_hora']
-        # Correção aqui: transformando em uma lista explícita
+        # Correção transformando em lista epxlicita 
         read_only_fields = ['id', 'eleicao', 'candidato', 'candidato_nome_urna', 'em_branco', 'em_branco_display', 'data_hora']
 
     def get_em_branco_display(self, obj):
